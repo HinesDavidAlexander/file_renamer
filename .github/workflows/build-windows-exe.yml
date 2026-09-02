@@ -1,0 +1,28 @@
+name: build-windows-exe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "file_renamer.py"
+      - ".github/workflows/build-windows-exe.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyinstaller
+
+      - run: pyinstaller --windowed --onefile --name FileRenamer file_renamer.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FileRenamer-windows
+          path: dist/FileRenamer.exe
