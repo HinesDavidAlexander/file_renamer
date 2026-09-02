@@ -1,11 +1,18 @@
 import json
 import re
+import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 PATTERN = re.compile(r"^(\d{1,2})-(\d{1,2})-(\d{4})(.*)$")
-CONFIG_PATH = Path.home() / ".file_renamer_config.json"
+# Store the config next to the running exe/script rather than the user's home dir,
+# since a roaming/network home folder can make that path slow to reach.
+if getattr(sys, "frozen", False):
+    APP_DIR = Path(sys.executable).parent
+else:
+    APP_DIR = Path(__file__).parent
+CONFIG_PATH = APP_DIR / "file_renamer_config.json"
 
 
 class RenamerApp(tk.Tk):
@@ -21,6 +28,9 @@ class RenamerApp(tk.Tk):
         last_folder = self.load_last_folder()
         if last_folder:
             self.folder_path.set(last_folder)
+            # Validate after the window is shown, so a slow/unreachable path
+            # (network share, VPN drive, cloud-synced folder) can't freeze startup.
+            self.after(100, self.validate_last_folder)
 
         # Top Section: Folder Selection
         top_frame = ttk.Frame(self, padding=10)
@@ -92,12 +102,21 @@ class RenamerApp(tk.Tk):
             self.scan_folder()
 
     def load_last_folder(self):
+        # Only reads the config file; does not touch the filesystem path itself,
+        # since stat-ing an unreachable network/cloud path here could block startup.
         try:
             data = json.loads(CONFIG_PATH.read_text())
             folder = data.get("last_folder", "") if isinstance(data, dict) else ""
-            return folder if isinstance(folder, str) and Path(folder).is_dir() else ""
+            return folder if isinstance(folder, str) else ""
         except (OSError, ValueError):
             return ""
+
+    def validate_last_folder(self):
+        if self.folder_path.get() and not Path(self.folder_path.get()).is_dir():
+            self.folder_path.set("")
+            self.status_label.config(
+                text="Last folder is unavailable. Select a folder to begin."
+            )
 
     def save_last_folder(self, folder):
         # Write to a temp file then rename, so a crash/concurrent write can't corrupt the config.
